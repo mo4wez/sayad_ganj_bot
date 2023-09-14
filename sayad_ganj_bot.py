@@ -25,6 +25,13 @@ class SayadGanjBot:
 
 
     def run(self):
+
+        self.bot.add_handler(
+            ConversationHandler(
+
+            )
+        )
+        
         self.bot.add_handler(
             CommandHandler(
                 command='start',
