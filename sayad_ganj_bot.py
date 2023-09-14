@@ -71,22 +71,33 @@ class SayadGanjBot:
                 )
 
             if results:
+                buttons = []
+                for result in results:
+                    translation = result.entry
+                    cleaned_description = re.sub(r'<h1>.*?</h1>', '', translation)
+                    new_trans = cleaned_description.split(':')[0]
+                    word_id = str(result._id)
+
+                    buttons.append(
+                        [InlineKeyboardButton(f'{new_trans}', callback_data=word_id)]
+                    )
+
+                reply_text = YOU + word_for_translate + ASKED
+
+                markup = InlineKeyboardMarkup(buttons)
 
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
-                    text='Here your result',
+                    text=reply_text,
+                    reply_markup=markup,
                 )
 
+            else:
+                reply_text=IAM_SORRY
 
-                for res in results:
-                    translation = res.entry
-                    cleaned_translation = re.sub(r'<h1>.*?</h1>', '', translation)
-
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=cleaned_translation,
-                    )
-
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=reply_text,
+                )
 
         db.close()
-
