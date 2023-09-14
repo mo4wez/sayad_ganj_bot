@@ -47,7 +47,7 @@ class SayadGanjBot:
         )
 
         self.bot.add_handler(
-            CallbackQueryHandler(callback=0)
+            CallbackQueryHandler(callback=self.show_translation_answer)
         )
 
         self.bot.run_polling()
@@ -63,19 +63,19 @@ class SayadGanjBot:
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message.text
 
-        if message.startswith(TRANSLATE_COMMAND):
-            word_for_translate = message.split(' ')[1]
+        if message:
+            word_for_translate = message
 
             results = WordBook.select().where(
                 WordBook.langFullWord == word_for_translate
-                )
+            )
+            print(len(results))
 
             if results:
                 buttons = []
                 for result in results:
-                    translation = result.entry
-                    cleaned_description = re.sub(r'<h1>.*?</h1>', '', translation)
-                    new_trans = cleaned_description.split(':')[0]
+                    cleaned_description = self.remove_h_tags(result.entry)
+                    new_trans = cleaned_description.split(':')[0].split('\n')[1]
                     word_id = str(result._id)
 
                     buttons.append(
@@ -84,20 +84,40 @@ class SayadGanjBot:
 
                 reply_text = YOU + word_for_translate + ASKED
 
-                markup = InlineKeyboardMarkup(buttons)
+                self.markup = InlineKeyboardMarkup(buttons)
 
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
                     text=reply_text,
-                    reply_markup=markup,
+                    reply_markup=self.markup,
                 )
+
 
             else:
                 reply_text=IAM_SORRY
 
                 await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
+                    chat_id=update.message.chat_id,
                     text=reply_text,
                 )
 
         db.close()
+
+
+    async def show_translation_answer(self, update: Update, context: CallbackContext):
+        query = update.callback_query
+
+        data = query.data
+        print(data)
+
+        definition = WordBook.select().where(WordBook._id == data)
+        for defi in definition:
+            print(defi.entry)
+            entry = self.remove_h_tags(defi.entry)
+            await query.edit_message_text(text=entry, reply_markup=self.markup)
+
+        db.close()
+
+    def remove_h_tags(self, word):
+        new_word = re.sub(r'<h1>.*?</h1>', '', word)
+        return new_word
