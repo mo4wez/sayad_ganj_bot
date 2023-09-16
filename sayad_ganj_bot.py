@@ -16,9 +16,11 @@ from telegram.ext import (
     )
 from constants.messages import (
     WELCOME_TEXT,
+    TRANSLATE_COMMAND,
     YOU,
     IAM_SORRY,
-    ASKED
+    ASKED,
+    ARROW_DOWN,
     )
 from config import SayadGanjConfig
 from database.db_core import WordBook, db
@@ -36,8 +38,15 @@ class SayadGanjBot:
     def run(self):
         self.bot.add_handler(
             MessageHandler(
-                filters=filters.TEXT & ~filters.COMMAND,
-                callback=self.translate,
+                filters=filters.ChatType.PRIVATE,
+                callback=self.respond_in_private_chat,
+            )
+        )
+
+        self.bot.add_handler(
+            MessageHandler(
+                filters=filters.ChatType.GROUPS,
+                callback=self.respond_in_group_chat,
             )
         )
 
@@ -62,35 +71,30 @@ class SayadGanjBot:
             text=WELCOME_TEXT,
         )
 
-    async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        message = update.message.text
+    async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
+        message = word_to_trans
 
         if message:
             word_for_translate = message
 
-            results = WordBook.select().where(
+            self.results = WordBook.select().where(
                 WordBook.langFullWord == word_for_translate
             )
-            print(len(results))
+            print(len(self.results))
 
-            if results:
-                buttons = []
-                for result in results:
-                    cleaned_description = self.remove_h_tags(result.entry)
-                    new_trans = cleaned_description.split(':')[0].split('\n')[1]
-
-                    buttons.append(
-                        [InlineKeyboardButton(f'{new_trans}', callback_data=str(result._id))]
-                    )
-
-                reply_text = YOU + word_for_translate + ASKED
-
-                self.markup = InlineKeyboardMarkup(buttons)
+            if self.results:
+                reply_text = ''
+                for result in self.results:
+                    cleaned_translation = self.remove_h_tags(result.entry)
+                    
+                    if len(self.results) > 1:
+                        reply_text += cleaned_translation + '\n'
+                    else:
+                        reply_text += cleaned_translation
 
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
                     text=reply_text,
-                    reply_markup=self.markup,
                 )
 
             else:
@@ -103,15 +107,28 @@ class SayadGanjBot:
 
         db.close()
 
+
+    async def respond_in_private_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        word = update.message.text
+        await self.translate(update, context, word_to_trans=word)
+
+    async def respond_in_group_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        message = update.message.text
+        print('in group def')
+        if message.startswith(TRANSLATE_COMMAND):
+            word = message.split()[:3]
+            print(word)
+
+            await self.translate(update, context, word_to_trans=word[1])
+
+
     async def show_translation_answer(self, update: Update, context: CallbackContext):
         query = update.callback_query
-
         data = query.data
-        print(data)
+        print(f'data: {data}')
 
         definition = WordBook.select().where(WordBook._id == data)
         for defi in definition:
-            print(defi.entry)
             entry = self.remove_h_tags(defi.entry)
             try:
                 await query.edit_message_text(text=entry, reply_markup=self.markup)
