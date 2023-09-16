@@ -14,10 +14,16 @@ from telegram.ext import (
     CallbackContext,
     filters,
     )
-from constants.messages import TRANSLATE_COMMAND, YOU, IAM_SORRY, ASKED
+from constants.messages import (
+    WELCOME_TEXT,
+    YOU,
+    IAM_SORRY,
+    ASKED
+    )
 from config import SayadGanjConfig
 from database.db_core import WordBook, db
 import re
+from time import time
 
 
 class SayadGanjBot:
@@ -27,16 +33,13 @@ class SayadGanjBot:
 
         print('init')
 
-
     def run(self):
-
         self.bot.add_handler(
             MessageHandler(
                 filters=filters.TEXT & ~filters.COMMAND,
                 callback=self.translate,
             )
         )
-
 
         self.bot.add_handler(
             CommandHandler(
@@ -54,10 +57,9 @@ class SayadGanjBot:
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         
-
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="Hello there!"
+            text=WELCOME_TEXT,
         )
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -76,10 +78,9 @@ class SayadGanjBot:
                 for result in results:
                     cleaned_description = self.remove_h_tags(result.entry)
                     new_trans = cleaned_description.split(':')[0].split('\n')[1]
-                    word_id = str(result._id)
 
                     buttons.append(
-                        [InlineKeyboardButton(f'{new_trans}', callback_data=word_id)]
+                        [InlineKeyboardButton(f'{new_trans}', callback_data=str(result._id))]
                     )
 
                 reply_text = YOU + word_for_translate + ASKED
@@ -92,7 +93,6 @@ class SayadGanjBot:
                     reply_markup=self.markup,
                 )
 
-
             else:
                 reply_text=IAM_SORRY
 
@@ -102,7 +102,6 @@ class SayadGanjBot:
                 )
 
         db.close()
-
 
     async def show_translation_answer(self, update: Update, context: CallbackContext):
         query = update.callback_query
@@ -114,7 +113,10 @@ class SayadGanjBot:
         for defi in definition:
             print(defi.entry)
             entry = self.remove_h_tags(defi.entry)
-            await query.edit_message_text(text=entry, reply_markup=self.markup)
+            try:
+                await query.edit_message_text(text=entry, reply_markup=self.markup)
+            except TimeoutError:
+                query.edit_message_text(text='Error', reply_markup=self.markup)
 
         db.close()
 
