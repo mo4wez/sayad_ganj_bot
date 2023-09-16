@@ -1,4 +1,4 @@
-from messages import *
+from constants.messages import *
 
 from telegram import (
     Update,

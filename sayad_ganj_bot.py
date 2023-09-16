@@ -21,7 +21,14 @@ from constants.messages import (
     IAM_SORRY,
     ASKED,
     ARROW_DOWN,
+    CHANNEL_USERNAME,
+    USER_STATUS,
+    FORCE_JOIN_TEXT,
+    JOIN_SUCCESS,
+    JOIN_FAILED,
+    HELP_MESSAGE,
     )
+from constants.keyboards import FORCE_JOIN_KEYBOARD, ADD_TO_GROUP_KEYBOARD
 from config import SayadGanjConfig
 from database.db_core import WordBook, db
 import re
@@ -32,20 +39,35 @@ class SayadGanjBot:
     def __init__(self):
         self.config = SayadGanjConfig()
         self.bot = Application.builder().token(self.config.token).build()
+        self.START = range(1)
 
         print('init')
 
     def run(self):
         self.bot.add_handler(
+            ConversationHandler(
+                entry_points=[CommandHandler(command='start', callback=self.start)],
+
+                states = {
+                    self.START: [MessageHandler(filters=filters.TEXT, callback=self.start)]
+                },
+
+                fallbacks = [
+                    CommandHandler(command='start', callback=self.start)
+                ]
+            )
+        )
+
+        self.bot.add_handler(
             MessageHandler(
-                filters=filters.ChatType.PRIVATE,
+                filters=filters.ChatType.PRIVATE & ~filters.COMMAND,
                 callback=self.respond_in_private_chat,
             )
         )
 
         self.bot.add_handler(
             MessageHandler(
-                filters=filters.ChatType.GROUPS,
+                filters=filters.ChatType.GROUPS & ~filters.COMMAND,
                 callback=self.respond_in_group_chat,
             )
         )
@@ -59,17 +81,38 @@ class SayadGanjBot:
         )
 
         self.bot.add_handler(
-            CallbackQueryHandler(callback=self.show_translation_answer)
+            CallbackQueryHandler(callback=self.is_user_joined)
         )
 
         self.bot.run_polling()
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=WELCOME_TEXT,
+        user_id = update.effective_chat.id
+        user_status = await context.bot.get_chat_member(
+            chat_id=CHANNEL_USERNAME,
+            user_id=user_id,
         )
+
+        if update.message.text == "/start":
+            if user_status.status not in USER_STATUS:
+                markup = InlineKeyboardMarkup(FORCE_JOIN_KEYBOARD)
+                print('in start')
+
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=FORCE_JOIN_TEXT,
+                    reply_markup=markup,
+                )
+                
+            else:
+                markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=WELCOME_TEXT,
+                reply_markup=markup
+            )
+
+        return self.START
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
         message = word_to_trans
@@ -121,21 +164,23 @@ class SayadGanjBot:
 
             await self.translate(update, context, word_to_trans=word[1])
 
-
-    async def show_translation_answer(self, update: Update, context: CallbackContext):
+    async def is_user_joined(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
+        user_id = update.effective_user.id
+
+        if query is None:
+            return
+        
         data = query.data
-        print(f'data: {data}')
+        if data == "joined":
+            user_member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
+            if user_member in USER_STATUS:
+                markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
+                await query.answer(JOIN_SUCCESS, show_alert=True)
+                await query.edit_message_text(HELP_MESSAGE, reply_markup=markup)
+            else:
+                await query.answer(JOIN_FAILED, show_alert=True)
 
-        definition = WordBook.select().where(WordBook._id == data)
-        for defi in definition:
-            entry = self.remove_h_tags(defi.entry)
-            try:
-                await query.edit_message_text(text=entry, reply_markup=self.markup)
-            except TimeoutError:
-                query.edit_message_text(text='Error', reply_markup=self.markup)
-
-        db.close()
 
     def remove_h_tags(self, word):
         new_word = re.sub(r'<h1>.*?</h1>', '', word)
