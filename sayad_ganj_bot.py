@@ -106,11 +106,11 @@ class SayadGanjBot:
                 
             else:
                 markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=WELCOME_TEXT,
-                reply_markup=markup
-            )
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=WELCOME_TEXT,
+                    reply_markup=markup
+                )
 
         return self.START
 
@@ -174,7 +174,7 @@ class SayadGanjBot:
         data = query.data
         if data == "joined":
             user_member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
-            if user_member in USER_STATUS:
+            if user_member.status in USER_STATUS:
                 markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
                 await query.answer(JOIN_SUCCESS, show_alert=True)
                 await query.edit_message_text(HELP_MESSAGE, reply_markup=markup)
