@@ -41,37 +41,22 @@ class SayadGanjBot:
     def __init__(self):
         self.config = SayadGanjConfig()
         self.bot = Application.builder().token(self.config.token).build()
-        self.START, self.CAN_TRANSLATE = range(2)
 
     def run(self):
         logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-        self.bot.add_handler(
-            ConversationHandler(
-                entry_points=[
-                    MessageHandler(filters=filters.TEXT & ~filters.COMMAND, callback=self.start)
-                ],
-
-                states = {
-                    self.START: [MessageHandler(filters=filters.TEXT, callback=self.start)],
-                    self.CAN_TRANSLATE: [MessageHandler(filters=filters.TEXT, callback=self.respond_in_private_chat)],
-                },
-
-                fallbacks = [
-                    CommandHandler(command='help', callback=self.help),
-                ]
-            )
-        )
+        
 
         self.bot.add_handler(
             CommandHandler(
-                command='help',
-                callback=self.help,
+                command='start',
+                callback=self.start,
+                filters=filters.COMMAND,
             )
         )
 
         self.bot.add_handler(
             MessageHandler(
-                filters=filters.ChatType.PRIVATE & ~filters.COMMAND,
+                filters=filters.ChatType.PRIVATE,
                 callback=self.respond_in_private_chat,
             )
         )
@@ -87,6 +72,13 @@ class SayadGanjBot:
             CallbackQueryHandler(callback=self.is_user_joined)
         )
 
+        self.bot.add_handler(
+            CommandHandler(
+                command='help',
+                callback=self.help,
+            )
+        )
+
         self.bot.run_polling()
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -97,34 +89,26 @@ class SayadGanjBot:
             user_id=user_id,
         )
 
-        if update.message.text == "/start":
-            if user_status.status not in USER_STATUS:
-                markup = InlineKeyboardMarkup(FORCE_JOIN_KEYBOARD)
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=FORCE_JOIN_TEXT,
-                    reply_markup=markup,
-                )
+        if user_status.status not in USER_STATUS:
+            markup = InlineKeyboardMarkup(FORCE_JOIN_KEYBOARD)
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=FORCE_JOIN_TEXT,
+                reply_markup=markup,
+            )
+        
+        else:
+            markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=WELCOME_TEXT,
+                reply_markup=markup
+            )
 
-                return self.START
-            
-            elif not context.user_data.get('user_joined', False):
-                markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=WELCOME_TEXT,
-                    reply_markup=markup
-                )
-
-                context.user_data['user_joined'] = True
-                return self.CAN_TRANSLATE
-            
-        return self.START
-
+        return ConversationHandler.END
 
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(HELP_MESSAGE)
-
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
         self.results = WordBook.select().where(
@@ -143,15 +127,13 @@ class SayadGanjBot:
                 else:
                     reply_text += cleaned_translation
 
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
+            await update.message.reply_text(
                 text=reply_text,
             )
         else:
             reply_text=IAM_SORRY
 
-            await context.bot.send_message(
-                chat_id=update.message.chat_id,
+            await update.message.reply_text(
                 text=reply_text,
             )
 
@@ -159,18 +141,9 @@ class SayadGanjBot:
 
     async def respond_in_private_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_chat.id
-        user_joined = context.user_data.get('user_joined', False)
 
-        if user_joined:
-            word = update.message.text
-            await self.translate(update, context, word_to_trans=word)
-        else:
-            markup = InlineKeyboardMarkup(FORCE_JOIN_KEYBOARD)
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=FORCE_JOIN_TEXT,
-                reply_markup=markup,
-            )
+        word = update.message.text
+        await self.translate(update, context, word_to_trans=word)
 
     async def respond_in_group_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message.text
