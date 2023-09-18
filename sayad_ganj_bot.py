@@ -24,6 +24,7 @@ from constants.messages import (
     CHANNEL_USERNAME,
     USER_STATUS,
     FORCE_JOIN_TEXT,
+    IAM_JOINED,
     JOIN_SUCCESS,
     JOIN_FAILED,
     HELP_MESSAGE,
@@ -69,14 +70,6 @@ class SayadGanjBot:
             MessageHandler(
                 filters=filters.ChatType.GROUPS & ~filters.COMMAND,
                 callback=self.respond_in_group_chat,
-            )
-        )
-
-        self.bot.add_handler(
-            CommandHandler(
-                command='start',
-                callback=self.start,
-                filters=filters.TEXT,
             )
         )
 
@@ -172,7 +165,7 @@ class SayadGanjBot:
             return
         
         data = query.data
-        if data == "joined":
+        if data == IAM_JOINED:
             user_member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
             if user_member.status in USER_STATUS:
                 markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
