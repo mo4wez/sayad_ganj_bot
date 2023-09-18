@@ -1,4 +1,5 @@
 import re
+import logging
 from database.db_core import WordBook, db
 from config import SayadGanjConfig
 from asyncio import sleep
@@ -39,18 +40,16 @@ class SayadGanjBot:
     def __init__(self):
         self.config = SayadGanjConfig()
         self.bot = Application.builder().token(self.config.token).build()
-        self.START, self.TRANSLATE = range(2)
-
-        print('init')
+        self.START = range(1)
 
     def run(self):
+        logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
         self.bot.add_handler(
             ConversationHandler(
                 entry_points=[CommandHandler(command='start', callback=self.start)],
 
                 states = {
                     self.START: [MessageHandler(filters=filters.TEXT, callback=self.start)],
-                    self.TRANSLATE: [MessageHandler(filters=filters.TEXT, callback=self.respond_in_private_chat)]
                 },
 
                 fallbacks = [
@@ -80,6 +79,7 @@ class SayadGanjBot:
         self.bot.run_polling()
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        logging.info('in start')
         user_id = update.effective_chat.id
         user_status = await context.bot.get_chat_member(
             chat_id=CHANNEL_USERNAME,
@@ -89,8 +89,6 @@ class SayadGanjBot:
         if update.message.text == "/start":
             if user_status.status not in USER_STATUS:
                 markup = InlineKeyboardMarkup(FORCE_JOIN_KEYBOARD)
-                print('in start')
-
                 await context.bot.send_message(
                     chat_id=user_id,
                     text=FORCE_JOIN_TEXT,
@@ -105,44 +103,36 @@ class SayadGanjBot:
                     reply_markup=markup
                 )
 
-                return self.TRANSLATE
-
-        return self.START
-
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
-        message = word_to_trans
+        self.results = WordBook.select().where(
+            WordBook.langFullWord == word_to_trans
+        )
+        logging.info(f'records: {len(self.results)}')
 
-        if message:
-            word_for_translate = message
+        if self.results:
+            reply_text = ''
+            for result in self.results:
+                cleaned_translation = self.remove_h_tags(result.entry)
+                
+                if len(self.results) > 1:
+                    reply_text += cleaned_translation + '\n'
+                    await sleep(0.2)
 
-            self.results = WordBook.select().where(
-                WordBook.langFullWord == word_for_translate
+                else:
+                    reply_text += cleaned_translation
+
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=reply_text,
             )
-            print(len(self.results))
 
-            if self.results:
-                reply_text = ''
-                for result in self.results:
-                    cleaned_translation = self.remove_h_tags(result.entry)
-                    
-                    if len(self.results) > 1:
-                        reply_text += cleaned_translation + '\n'
-                        await sleep(0.2)
-                    else:
-                        reply_text += cleaned_translation
+        else:
+            reply_text=IAM_SORRY
 
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=reply_text,
-                )
-
-            else:
-                reply_text=IAM_SORRY
-
-                await context.bot.send_message(
-                    chat_id=update.message.chat_id,
-                    text=reply_text,
-                )
+            await context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=reply_text,
+            )
 
         db.close()
 
@@ -153,12 +143,11 @@ class SayadGanjBot:
 
     async def respond_in_group_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message.text
-        print('in group def')
-        if message.startswith(TRANSLATE_COMMAND):
-            word = message.split()[:3]
-            print(word)
 
-            await self.translate(update, context, word_to_trans=word[1])
+        if message.startswith(TRANSLATE_COMMAND):
+            word = message.split()[1]
+
+            await self.translate(update, context, word_to_trans=word)
 
     async def is_user_joined(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -174,9 +163,13 @@ class SayadGanjBot:
                 markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
                 await query.answer(JOIN_SUCCESS, show_alert=True)
                 await query.edit_message_text(HELP_MESSAGE, reply_markup=markup)
+
+                return self.WAIT_FOR_MESSAGE
+            
             else:
                 await query.answer(JOIN_FAILED, show_alert=True)
 
+                return self.CHECK_JOIN
 
     def remove_h_tags(self, word):
         new_word = re.sub(r'<h1>.*?</h1>', '', word)
