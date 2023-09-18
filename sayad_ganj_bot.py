@@ -5,6 +5,7 @@ from config import SayadGanjConfig
 from asyncio import sleep
 
 from telegram import (
+    InlineKeyboardButton,
     Update,
     InlineKeyboardMarkup,
     )
@@ -40,21 +41,31 @@ class SayadGanjBot:
     def __init__(self):
         self.config = SayadGanjConfig()
         self.bot = Application.builder().token(self.config.token).build()
-        self.START = range(1)
+        self.START, self.CAN_TRANSLATE = range(2)
 
     def run(self):
         logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
         self.bot.add_handler(
             ConversationHandler(
-                entry_points=[CommandHandler(command='start', callback=self.start)],
+                entry_points=[
+                    MessageHandler(filters=filters.TEXT & ~filters.COMMAND, callback=self.start)
+                ],
 
                 states = {
                     self.START: [MessageHandler(filters=filters.TEXT, callback=self.start)],
+                    self.CAN_TRANSLATE: [MessageHandler(filters=filters.TEXT, callback=self.respond_in_private_chat)],
                 },
 
                 fallbacks = [
-                    CommandHandler(command='start', callback=self.start)
+                    CommandHandler(command='help', callback=self.help),
                 ]
+            )
+        )
+
+        self.bot.add_handler(
+            CommandHandler(
+                command='help',
+                callback=self.help,
             )
         )
 
@@ -94,14 +105,26 @@ class SayadGanjBot:
                     text=FORCE_JOIN_TEXT,
                     reply_markup=markup,
                 )
- 
-            else:
+
+                return self.START
+            
+            elif not context.user_data.get('user_joined', False):
                 markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
                 await context.bot.send_message(
                     chat_id=user_id,
                     text=WELCOME_TEXT,
                     reply_markup=markup
                 )
+
+                context.user_data['user_joined'] = True
+                return self.CAN_TRANSLATE
+            
+        return self.START
+
+
+    async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(HELP_MESSAGE)
+
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
         self.results = WordBook.select().where(
@@ -116,8 +139,7 @@ class SayadGanjBot:
                 
                 if len(self.results) > 1:
                     reply_text += cleaned_translation + '\n'
-                    await sleep(0.2)
-
+                    await sleep(0.3)
                 else:
                     reply_text += cleaned_translation
 
@@ -125,7 +147,6 @@ class SayadGanjBot:
                 chat_id=update.effective_chat.id,
                 text=reply_text,
             )
-
         else:
             reply_text=IAM_SORRY
 
@@ -136,17 +157,26 @@ class SayadGanjBot:
 
         db.close()
 
-
     async def respond_in_private_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        word = update.message.text
-        await self.translate(update, context, word_to_trans=word)
+        user_id = update.effective_chat.id
+        user_joined = context.user_data.get('user_joined', False)
+
+        if user_joined:
+            word = update.message.text
+            await self.translate(update, context, word_to_trans=word)
+        else:
+            markup = InlineKeyboardMarkup(FORCE_JOIN_KEYBOARD)
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=FORCE_JOIN_TEXT,
+                reply_markup=markup,
+            )
 
     async def respond_in_group_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message.text
 
         if message.startswith(TRANSLATE_COMMAND):
             word = message.split()[1]
-
             await self.translate(update, context, word_to_trans=word)
 
     async def is_user_joined(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -164,12 +194,8 @@ class SayadGanjBot:
                 await query.answer(JOIN_SUCCESS, show_alert=True)
                 await query.edit_message_text(HELP_MESSAGE, reply_markup=markup)
 
-                return self.WAIT_FOR_MESSAGE
-            
             else:
                 await query.answer(JOIN_FAILED, show_alert=True)
-
-                return self.CHECK_JOIN
 
     def remove_h_tags(self, word):
         new_word = re.sub(r'<h1>.*?</h1>', '', word)
