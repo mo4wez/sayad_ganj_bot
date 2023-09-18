@@ -1,6 +1,10 @@
+import re
+from database.db_core import WordBook, db
+from config import SayadGanjConfig
+from asyncio import sleep
+
 from telegram import (
     Update,
-    InlineKeyboardButton,
     InlineKeyboardMarkup,
     )
 from telegram.ext import (
@@ -8,39 +12,34 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ConversationHandler,
-    InlineQueryHandler,
     CallbackQueryHandler,
     ContextTypes,
-    CallbackContext,
     filters,
     )
 from constants.messages import (
     WELCOME_TEXT,
     TRANSLATE_COMMAND,
-    YOU,
     IAM_SORRY,
-    ASKED,
-    ARROW_DOWN,
     CHANNEL_USERNAME,
     USER_STATUS,
     FORCE_JOIN_TEXT,
-    IAM_JOINED,
+    JOINED,
     JOIN_SUCCESS,
     JOIN_FAILED,
     HELP_MESSAGE,
     )
-from constants.keyboards import FORCE_JOIN_KEYBOARD, ADD_TO_GROUP_KEYBOARD
-from config import SayadGanjConfig
-from database.db_core import WordBook, db
-import re
-from time import time
+from constants.keyboards import (
+    FORCE_JOIN_KEYBOARD,
+    ADD_TO_GROUP_KEYBOARD,
+    )
+
 
 
 class SayadGanjBot:
     def __init__(self):
         self.config = SayadGanjConfig()
         self.bot = Application.builder().token(self.config.token).build()
-        self.START = range(1)
+        self.START, self.TRANSLATE = range(2)
 
         print('init')
 
@@ -50,7 +49,8 @@ class SayadGanjBot:
                 entry_points=[CommandHandler(command='start', callback=self.start)],
 
                 states = {
-                    self.START: [MessageHandler(filters=filters.TEXT, callback=self.start)]
+                    self.START: [MessageHandler(filters=filters.TEXT, callback=self.start)],
+                    self.TRANSLATE: [MessageHandler(filters=filters.TEXT, callback=self.respond_in_private_chat)]
                 },
 
                 fallbacks = [
@@ -96,7 +96,7 @@ class SayadGanjBot:
                     text=FORCE_JOIN_TEXT,
                     reply_markup=markup,
                 )
-                
+ 
             else:
                 markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
                 await context.bot.send_message(
@@ -104,6 +104,8 @@ class SayadGanjBot:
                     text=WELCOME_TEXT,
                     reply_markup=markup
                 )
+
+                return self.TRANSLATE
 
         return self.START
 
@@ -125,6 +127,7 @@ class SayadGanjBot:
                     
                     if len(self.results) > 1:
                         reply_text += cleaned_translation + '\n'
+                        await sleep(0.2)
                     else:
                         reply_text += cleaned_translation
 
@@ -165,7 +168,7 @@ class SayadGanjBot:
             return
         
         data = query.data
-        if data == IAM_JOINED:
+        if data == JOINED:
             user_member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
             if user_member.status in USER_STATUS:
                 markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)

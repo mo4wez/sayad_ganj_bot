@@ -35,6 +35,6 @@ HELP_MESSAGE = """
 سید؟ تاکبند
 
 """
-IAM_JOINED = "joined"
+JOINED = "joined"
 ADD_TO_GROUP_MSG = "گروپ ءَ ھوار کن 👥"
 ADD_TO_GROUP_URL = "https://t.me/sayadganj_bot?startgroup=true"
