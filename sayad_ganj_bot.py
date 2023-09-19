@@ -83,7 +83,7 @@ class SayadGanjBot:
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
         self.results = WordBook.select().where(
             WordBook.langFullWord == word_to_trans
-        )
+            )
         logging.info(f'records: {len(self.results)}')
 
         if self.results:
@@ -111,14 +111,11 @@ class SayadGanjBot:
         db.close()
 
     async def respond_in_private_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_chat.id
-
         word = update.message.text
         await self.translate(update, context, word_to_trans=word)
 
     async def respond_in_group_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message.text
-
         if message.startswith(TRANSLATE_COMMAND):
             word = message.split()[1]
             await self.translate(update, context, word_to_trans=word)
