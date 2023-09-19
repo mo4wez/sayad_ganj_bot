@@ -91,7 +91,7 @@ class SayadGanjBot:
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
         self.results = WordBook.select().where(
             WordBook.langFullWord == word_to_trans
-            )
+            ).execute()
         logging.info(f'records: {len(self.results)}')
 
         if self.results:
@@ -101,7 +101,7 @@ class SayadGanjBot:
                 
                 if len(self.results) > 1:
                     reply_text += cleaned_translation + '\n'
-                    await sleep(0.5)
+                    await sleep(0.3)
                 else:
                     reply_text += cleaned_translation
 
