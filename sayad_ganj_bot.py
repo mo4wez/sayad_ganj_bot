@@ -19,21 +19,12 @@ from telegram.ext import (
     filters,
     )
 from constants.messages import (
-    WELCOME_TEXT,
     TRANSLATE_COMMAND,
     IAM_SORRY,
-    CHANNEL_USERNAME,
-    USER_STATUS,
     FORCE_JOIN_TEXT,
-    JOINED,
-    JOIN_SUCCESS,
-    JOIN_FAILED,
     HELP_MESSAGE,
     )
-from constants.keyboards import (
-    FORCE_JOIN_KEYBOARD,
-    ADD_TO_GROUP_KEYBOARD,
-    )
+from constants.keyboards import MARKUP
 
 
 
@@ -41,22 +32,21 @@ class SayadGanjBot:
     def __init__(self):
         self.config = SayadGanjConfig()
         self.bot = Application.builder().token(self.config.token).build()
+        self.CHECK_JOIN, self.JOIN_CHANNEL = range(2)
 
     def run(self):
         logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
         
-
         self.bot.add_handler(
             CommandHandler(
                 command='start',
-                callback=self.start,
-                filters=filters.COMMAND,
+                callback=self.start_message,
             )
         )
 
         self.bot.add_handler(
             MessageHandler(
-                filters=filters.ChatType.PRIVATE,
+                filters=filters.ChatType.PRIVATE & ~filters.COMMAND,
                 callback=self.respond_in_private_chat,
             )
         )
@@ -69,10 +59,6 @@ class SayadGanjBot:
         )
 
         self.bot.add_handler(
-            CallbackQueryHandler(callback=self.is_user_joined)
-        )
-
-        self.bot.add_handler(
             CommandHandler(
                 command='help',
                 callback=self.help,
@@ -81,31 +67,15 @@ class SayadGanjBot:
 
         self.bot.run_polling()
 
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        logging.info('in start')
+    async def start_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        logging.info('in start message')
         user_id = update.effective_chat.id
-        user_status = await context.bot.get_chat_member(
-            chat_id=CHANNEL_USERNAME,
-            user_id=user_id,
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=FORCE_JOIN_TEXT,
+            reply_markup=MARKUP,
         )
-
-        if user_status.status not in USER_STATUS:
-            markup = InlineKeyboardMarkup(FORCE_JOIN_KEYBOARD)
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=FORCE_JOIN_TEXT,
-                reply_markup=markup,
-            )
-        
-        else:
-            markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=WELCOME_TEXT,
-                reply_markup=markup
-            )
-
-        return ConversationHandler.END
 
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(HELP_MESSAGE)
@@ -129,6 +99,7 @@ class SayadGanjBot:
 
             await update.message.reply_text(
                 text=reply_text,
+                reply_markup=MARKUP,
             )
         else:
             reply_text=IAM_SORRY
@@ -151,24 +122,6 @@ class SayadGanjBot:
         if message.startswith(TRANSLATE_COMMAND):
             word = message.split()[1]
             await self.translate(update, context, word_to_trans=word)
-
-    async def is_user_joined(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        user_id = update.effective_user.id
-
-        if query is None:
-            return
-        
-        data = query.data
-        if data == JOINED:
-            user_member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
-            if user_member.status in USER_STATUS:
-                markup = InlineKeyboardMarkup(ADD_TO_GROUP_KEYBOARD)
-                await query.answer(JOIN_SUCCESS, show_alert=True)
-                await query.edit_message_text(HELP_MESSAGE, reply_markup=markup)
-
-            else:
-                await query.answer(JOIN_FAILED, show_alert=True)
 
     def remove_h_tags(self, word):
         new_word = re.sub(r'<h1>.*?</h1>', '', word)
