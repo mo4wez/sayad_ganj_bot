@@ -19,6 +19,7 @@ from telegram.ext import (
     filters,
     )
 from constants.messages import (
+    ERROR_MESSAGE,
     TRANSLATE_COMMAND,
     IAM_SORRY,
     FORCE_JOIN_TEXT,
@@ -65,6 +66,10 @@ class SayadGanjBot:
             )
         )
 
+        self.bot.add_error_handler(
+            callback=self.error,
+        )
+
         self.bot.run_polling()
 
     async def start_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,6 +84,9 @@ class SayadGanjBot:
 
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(HELP_MESSAGE)
+    
+    async def error(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(ERROR_MESSAGE)
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
         self.results = WordBook.select().where(
@@ -93,7 +101,7 @@ class SayadGanjBot:
                 
                 if len(self.results) > 1:
                     reply_text += cleaned_translation + '\n'
-                    await sleep(0.3)
+                    await sleep(0.5)
                 else:
                     reply_text += cleaned_translation
 
