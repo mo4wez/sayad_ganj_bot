@@ -4,6 +4,8 @@ from database.db_core import WordBook, db
 from config import SayadGanjConfig
 from asyncio import sleep
 
+from telegram.error import TimedOut
+
 from telegram import (
     InlineKeyboardButton,
     Update,
@@ -33,7 +35,6 @@ class SayadGanjBot:
     def __init__(self):
         self.config = SayadGanjConfig()
         self.bot = Application.builder().token(self.config.token).build()
-        self.CHECK_JOIN, self.JOIN_CHANNEL = range(2)
 
     def run(self):
         logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -66,10 +67,6 @@ class SayadGanjBot:
             )
         )
 
-        self.bot.add_error_handler(
-            callback=self.error,
-        )
-
         self.bot.run_polling()
 
     async def start_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -84,15 +81,18 @@ class SayadGanjBot:
 
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(HELP_MESSAGE)
-    
-    async def error(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(ERROR_MESSAGE)
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
-        self.results = WordBook.select().where(
-            WordBook.langFullWord == word_to_trans
-            ).execute()
-        logging.info(f'records: {len(self.results)}')
+        try:
+            self.results = WordBook.select().where(
+                WordBook.langFullWord == word_to_trans
+                ).execute()
+            logging.info(f'records: {len(self.results)}')
+
+            db.close() 
+
+        except TimedOut as e:
+            logging.info(f'Exception Error: {e}')
 
         if self.results:
             reply_text = ''
@@ -101,9 +101,8 @@ class SayadGanjBot:
                 
                 if len(self.results) > 1:
                     reply_text += cleaned_translation + '\n'
-                    await sleep(0.3)
                 else:
-                    reply_text += cleaned_translation
+                    reply_text = cleaned_translation
 
             await update.message.reply_text(
                 text=reply_text,
@@ -116,7 +115,6 @@ class SayadGanjBot:
                 text=reply_text,
             )
 
-        db.close()
 
     async def respond_in_private_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         word = update.message.text
