@@ -1,33 +1,26 @@
 import re
 import logging
 from database.db_core import WordBook, db
+from database.user_model import User
+from database.user_model import db as user_db
 from config import SayadGanjConfig
 from asyncio import sleep
-
+from constants.keyboards import GROUP_MARKUP, TAKBAND_MARKUP
 from telegram.error import TimedOut
-
-from telegram import (
-    InlineKeyboardButton,
-    Update,
-    InlineKeyboardMarkup,
-    )
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    ConversationHandler,
-    CallbackQueryHandler,
     ContextTypes,
     filters,
     )
 from constants.messages import (
-    ERROR_MESSAGE,
     TRANSLATE_COMMAND,
     IAM_SORRY,
     FORCE_JOIN_TEXT,
     HELP_MESSAGE,
     )
-from constants.keyboards import MARKUP
 
 
 
@@ -71,16 +64,31 @@ class SayadGanjBot:
 
     async def start_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.info('in start message')
-        user_id = update.effective_chat.id
+        user = update.message.from_user
+        chat_id = str(user.id)
+        first_name = user.first_name or 'No name'
+        username = user.username
+
+        existing_user = User.get_or_none(User.chat_id == chat_id)
+
+        if existing_user:
+            existing_user.first_name = first_name
+            existing_user.username = username
+            existing_user.save()
+        else:
+            User.create(chat_id=chat_id, first_name=first_name, username=username)
 
         await context.bot.send_message(
-            chat_id=user_id,
+            chat_id=chat_id,
             text=FORCE_JOIN_TEXT,
-            reply_markup=MARKUP,
+            reply_markup=TAKBAND_MARKUP,
         )
-
+        
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(HELP_MESSAGE)
+        await update.message.reply_text(
+            text=HELP_MESSAGE,
+            reply_markup=GROUP_MARKUP,
+            )
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
         self.results = await self.search_word(word_to_trans)
@@ -96,7 +104,7 @@ class SayadGanjBot:
 
             await update.message.reply_text(
                 text=reply_text,
-                reply_markup=MARKUP,
+                reply_markup=GROUP_MARKUP,
             )
         else:
             reply_text=IAM_SORRY
