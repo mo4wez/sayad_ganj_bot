@@ -4,7 +4,7 @@ db = SqliteDatabase('bot_users.db')
 
 class User(Model):
     chat_id = CharField(unique=True)
-    fist_name = CharField()
+    first_name = CharField()
     username = CharField(null=True)
 
     class Meta:
