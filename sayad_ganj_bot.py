@@ -83,17 +83,7 @@ class SayadGanjBot:
         await update.message.reply_text(HELP_MESSAGE)
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
-        try:
-            self.results = WordBook.select().where(
-                WordBook.langFullWord == word_to_trans
-                ).execute()
-            logging.info(f'records: {len(self.results)}')
-
-            db.close() 
-
-        except TimedOut as e:
-            logging.info(f'Exception Error: {e}')
-
+        self.results = await self.search_word(word_to_trans)
         if self.results:
             reply_text = ''
             for result in self.results:
@@ -125,6 +115,20 @@ class SayadGanjBot:
         if message.startswith(TRANSLATE_COMMAND):
             word = message.split()[1]
             await self.translate(update, context, word_to_trans=word)
+
+    async def search_word(self, word_to_trans):
+        try:
+            results = WordBook.select().where(
+                WordBook.langFullWord == word_to_trans
+                )
+            await sleep(0.2)
+            db.close()
+            logging.info(f'records: {len(results)}')
+
+            return results
+        
+        except TimedOut as e:
+            logging.info(f'Exception Error: {e}')
 
     def remove_h_tags(self, word):
         new_word = re.sub(r'<h1>.*?</h1>', '', word)
