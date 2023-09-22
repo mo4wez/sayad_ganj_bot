@@ -1,6 +1,8 @@
 import re
 import logging
+import unicodedata
 from database.db_core import WordBook, db
+from database.english_words import EnglishWordBook, eng_db
 from database.user_model import User
 from database.user_model import db as user_db
 from config import SayadGanjConfig
@@ -91,28 +93,49 @@ class SayadGanjBot:
             )
 
     async def translate(self, update: Update, context: ContextTypes.DEFAULT_TYPE, word_to_trans):
-        self.results = await self.search_word(word_to_trans)
-        if self.results:
-            reply_text = ''
-            for result in self.results:
-                cleaned_translation = self.remove_h_tags(result.entry)
-                
-                if len(self.results) > 1:
-                    reply_text += cleaned_translation + '\n'
-                else:
-                    reply_text = cleaned_translation
+        if any(unicodedata.name(char).startswith('ARABIC') for char in word_to_trans):
+            self.results = await self.search_word(word_to_trans)
+            if self.results:
+                reply_text = ''
+                for result in self.results:
+                    cleaned_translation = self.remove_h_tags(result.entry)
+                    
+                    if len(self.results) > 1:
+                        reply_text += cleaned_translation + '\n'
+                    else:
+                        reply_text = cleaned_translation
 
-            await update.message.reply_text(
-                text=reply_text,
-                reply_markup=GROUP_MARKUP,
-            )
+                await update.message.reply_text(
+                    text=reply_text,
+                    reply_markup=GROUP_MARKUP,
+                )
+            else:
+                reply_text=IAM_SORRY
+
+                await update.message.reply_text(
+                    text=reply_text,
+                )
         else:
-            reply_text=IAM_SORRY
+            print('in english results if')
+            self.english_results = await self.search_english_word(word_to_trans)
 
-            await update.message.reply_text(
-                text=reply_text,
-            )
+            if self.english_results:
+                print('english results found')
+                reply_text = ''
+                for eng_res in self.english_results:
+                    print(eng_res.definitions)
+                    reply_text = eng_res.definitions + '\n'
+        
+                await update.message.reply_text(
+                    text=reply_text,
+                    reply_markup=GROUP_MARKUP,
+                )
+            else:
+                reply_text=IAM_SORRY
 
+                await update.message.reply_text(
+                    text=reply_text,
+                )
 
     async def respond_in_private_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         word = update.message.text
@@ -131,11 +154,26 @@ class SayadGanjBot:
                 )
             await sleep(0.2)
             db.close()
-            logging.info(f'records: {len(results)}')
+            logging.info(f'{len(results)} records for: {word_to_trans}')
 
             return results
         
-        except TimedOut as e:
+        except Exception as e:
+            logging.info(f'Exception Error: {e}')
+
+    async def search_english_word(self, word_to_trans):
+        try:
+            eng_results = EnglishWordBook.select().where(
+                EnglishWordBook.latin == word_to_trans
+            )
+            await sleep(0.2)
+            eng_db.close()
+            logging.info(f'{len(eng_results)} records for: {word_to_trans}')
+            logging.info(f'results: {eng_results}')
+
+            return eng_results
+
+        except Exception as e:
             logging.info(f'Exception Error: {e}')
 
     def remove_h_tags(self, word):
